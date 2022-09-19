@@ -1,3 +1,7 @@
 
 /target/
 **/*.rs.bk
+
+# Visual Studio Code artefacts
+/.vscode/
+*.code-workspace
