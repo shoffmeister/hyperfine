@@ -110,6 +110,14 @@ impl<'a> Benchmark<'a> {
         self.run_intermediate_command(command, error_output)
     }
 
+    /// Run the command specified by `--conclude`.
+    fn run_conclusion_command(&self, command: &Command<'_>) -> Result<TimingResult> {
+        let error_output = "The conclusion command terminated with a non-zero exit code. \
+                            Append ' || true' to the command if you are sure that this can be ignored.";
+
+        self.run_intermediate_command(command, error_output)
+    }
+    
     /// Run the benchmark for a single command
     pub fn run(&self) -> Result<BenchmarkResult> {
         let command_name = self.command.get_name();
@@ -147,6 +155,25 @@ impl<'a> Benchmark<'a> {
                 .transpose()
         };
 
+        let conclusion_command = self.options.conclusion_command.as_ref().map(|values| {
+            let conclusion_command = if values.len() == 1 {
+                &values[0]
+            } else {
+                &values[self.number]
+            };
+            Command::new_parametrized(
+                None,
+                conclusion_command,
+                self.command.get_parameters().iter().cloned(),
+            )
+        });
+        let run_conclusion_command = || {
+            conclusion_command
+                .as_ref()
+                .map(|cmd| self.run_conclusion_command(cmd))
+                .transpose()
+        };
+
         self.run_setup_command(self.command.get_parameters().iter().cloned())?;
 
         // Warmup phase
@@ -164,6 +191,7 @@ impl<'a> Benchmark<'a> {
             for _ in 0..self.options.warmup_count {
                 let _ = run_preparation_command()?;
                 let _ = self.executor.run_command_and_measure(self.command, None)?;
+                let _ = run_conclusion_command()?;
                 if let Some(bar) = progress_bar.as_ref() {
                     bar.inc(1)
                 }
@@ -192,9 +220,13 @@ impl<'a> Benchmark<'a> {
         let (res, status) = self.executor.run_command_and_measure(self.command, None)?;
         let success = status.success();
 
+        let conclusion_result = run_conclusion_command()?;
+        let conclusion_overhead =
+            conclusion_result.map_or(0.0, |res| res.time_real + self.executor.time_overhead());
+
         // Determine number of benchmark runs
         let runs_in_min_time = (self.options.min_benchmarking_time
-            / (res.time_real + self.executor.time_overhead() + preparation_overhead))
+            / (res.time_real + self.executor.time_overhead() + preparation_overhead + conclusion_overhead))
             as u64;
 
         let count = {
@@ -241,6 +273,8 @@ impl<'a> Benchmark<'a> {
 
             let (res, status) = self.executor.run_command_and_measure(self.command, None)?;
             let success = status.success();
+
+            run_conclusion_command()?;
 
             times_real.push(res.time_real);
             times_user.push(res.time_user);

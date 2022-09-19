@@ -181,6 +181,9 @@ pub struct Options {
     /// Command(s) to run before each timing run
     pub preparation_command: Option<Vec<String>>,
 
+    /// Command(s) to run after each timing run
+    pub conclusion_command: Option<Vec<String>>,
+
     /// Command to run before each *batch* of timing runs, i.e. before each individual benchmark
     pub setup_command: Option<String>,
 
@@ -208,6 +211,7 @@ impl Default for Options {
             min_benchmarking_time: 3.0,
             command_failure_action: CmdFailureAction::RaiseError,
             preparation_command: None,
+            conclusion_command: None,
             setup_command: None,
             cleanup_command: None,
             output_style: OutputStyleOption::Full,
@@ -264,6 +268,10 @@ impl Options {
 
         options.preparation_command = matches
             .values_of("prepare")
+            .map(|values| values.map(String::from).collect::<Vec<String>>());
+
+        options.conclusion_command = matches
+            .values_of("conclude")
             .map(|values| values.map(String::from).collect::<Vec<String>>());
 
         options.cleanup_command = matches.value_of("cleanup").map(String::from);
